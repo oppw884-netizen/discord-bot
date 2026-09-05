@@ -101,6 +101,18 @@ CUSTOM_EMOJI_NAMES = {
     "fun_gamer": "gamer",
     "fun_crewmate": "bluecrewmate",
 }
+bot.startup_done = False # ใช้กันไม่ให้ sync คำสั่ง/โหลด emoji ซ้ำทุกครั้งที่ reconnect (กัน global rate limit)
+
+@bot.tree.error
+async def on_app_command_error(interaction: discord.Interaction, error: app_commands.AppCommandError):
+    if isinstance(error, app_commands.CommandOnCooldown):
+        await interaction.response.send_message(
+            f"⏳ โปรดใจเย็นๆ รออีก {error.retry_after:.1f} วินาที แล้วลองใหม่นะครับ", 
+            ephemeral=True
+        )
+    else:
+        # จัดการ Error อื่นๆ ตามปกติ
+        pass
 
 # เก็บ Emoji object ของแอปบอทหลังโหลดจาก Discord (ตอน on_ready)
 custom_emoji_cache: dict[str, "discord.Emoji"] = {}
