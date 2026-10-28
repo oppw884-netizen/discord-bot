@@ -20,14 +20,6 @@ async function getRobloxUser(username) {
   return data[0] || null; // {id, name, displayName}
 }
 
-async function getGroupRank(robloxId) {
-  const res = await fetch(`https://groups.roblox.com/v2/users/${robloxId}/groups/roles`);
-  if (!res.ok) throw new Error('Roblox groups API error');
-  const list = (await res.json()).data;
-  const g = list.find((x) => x.group.id === cfg.robloxGroupId);
-  return g ? g.role : null; // {id, name, rank}
-}
-
 // ---------- Commands ----------
 const commands = [
   new SlashCommandBuilder()
@@ -48,13 +40,13 @@ function panelPayload() {
     .setColor(cfg.color)
     .setTitle('🎖️ อัพเดตยศในดิสคอร์ด')
     .setDescription(
-      'ได้เลื่อนยศในเกมแล้ว? กดปุ่มด้านล่าง บอทจะเช็คยศจริงของคุณจากกลุ่ม Roblox แล้วส่งให้ผู้ตรวจสอบยืนยัน\n\n' +
+      'ได้เลื่อนยศในเกมแล้ว? กดปุ่มด้านล่างเพื่อส่งข้อมูลให้ผู้ตรวจสอบยืนยัน\n\n' +
       '1. กด 📝 **กรอกข้อมูลอัพเดทยศ**\n' +
       '2. ใส่ **ชื่อผู้ใช้ Roblox** (ชื่อหลัง @ ไม่ใช่ชื่อที่แสดง)\n' +
       '3. แนบ **รูปในเกม** ที่เห็นชื่อและยศบนหัวชัด ๆ (ได้สูงสุด 10 รูป)\n' +
-      '4. รอผู้ตรวจสอบกดยืนยัน บอทจะเปลี่ยนชื่อและให้ยศให้เอง แล้วแจ้งผลทาง DM'
+      '4. รอผู้ตรวจสอบกดยืนยัน บอทจะเปลี่ยนชื่อให้เอง แล้วแจ้งผลทาง DM'
     )
-    .setFooter({ text: 'ไม่ต้องพิมพ์ยศเอง บอทอ่านยศจากในเกมให้ • ส่งคำขอได้ทีละ 1 อัน' });
+    .setFooter({ text: 'ส่งคำขอได้ทีละ 1 อัน' });
 
   const row = new ActionRowBuilder().addComponents(
     new ButtonBuilder().setCustomId('open_form').setLabel('📝 กรอกข้อมูลอัพเดทยศ').setStyle(ButtonStyle.Success),
@@ -110,19 +102,12 @@ client.on(Events.InteractionCreate, async (i) => {
       const rUser = await getRobloxUser(name);
       if (!rUser) return i.editReply('❌ ไม่พบชื่อผู้ใช้ Roblox นี้ ตรวจสอบตัวสะกดอีกครั้ง');
 
-      const role = await getGroupRank(rUser.id);
-      if (!role) return i.editReply('❌ บัญชีนี้ไม่ได้อยู่ในกลุ่ม Roblox ของเรา');
-      if (!cfg.ranks[role.rank]) {
-        return i.editReply(`❌ ยศ "${role.name}" (เลข ${role.rank}) ยังไม่ได้ตั้งค่าในบอท โปรดแจ้งแอดมิน`);
-      }
-
       const embed = new EmbedBuilder()
         .setColor(cfg.color)
         .setTitle('📝 คำขออัพเดทยศ')
         .addFields(
           { name: 'ผู้ขอ', value: `<@${i.user.id}>`, inline: true },
           { name: 'Roblox', value: `[${rUser.name}](https://www.roblox.com/users/${rUser.id}/profile)`, inline: true },
-          { name: 'ยศในกลุ่ม', value: `${role.name} (${role.rank})`, inline: true },
         )
         .setTimestamp();
       if (files[0]) embed.setImage(files[0].url);
@@ -162,25 +147,15 @@ client.on(Events.InteractionCreate, async (i) => {
 
       if (!member) return finish('ผู้ขอออกจากเซิร์ฟเวอร์แล้ว');
 
-      // เช็คยศซ้ำอีกครั้งตอนอนุมัติ (กันยศเปลี่ยนระหว่างรอ)
-      const role = await getGroupRank(robloxId);
-      const rankCfg = role && cfg.ranks[role.rank];
-      if (!rankCfg) return i.followUp({ content: 'ยศปัจจุบันไม่อยู่ในรายการ หรือออกจากกลุ่มแล้ว', flags: MessageFlags.Ephemeral });
-
+      // ดึงชื่อ Roblox ล่าสุดตอนอนุมัติ
       const res = await fetch(`https://users.roblox.com/v1/users/${robloxId}`).then((r) => r.json());
       const rName = res.name;
 
-      // ถอด role ยศเก่า ใส่ role ใหม่
-      const allRankRoles = Object.values(cfg.ranks).map((r) => r.roleId);
-      const toRemove = allRankRoles.filter((id) => id !== rankCfg.roleId && member.roles.cache.has(id));
-      if (toRemove.length) await member.roles.remove(toRemove).catch(() => {});
-      await member.roles.add(rankCfg.roleId).catch(() => {});
-
-      const nick = cfg.nicknameFormat.replace('{prefix}', rankCfg.prefix).replace('{username}', rName).slice(0, 32);
+      const nick = cfg.nicknameFormat.replace('{username}', rName).slice(0, 32);
       let nickOk = true;
       await member.setNickname(nick).catch(() => { nickOk = false; });
 
-      await dm(`✅ อัพเดทยศสำเร็จ!\nยศ: **${role.name}**\nชื่อ: **${nick}**`);
+      await dm(`✅ คำขออัพเดทของคุณได้รับการอนุมัติแล้ว!\nชื่อ: **${nick}**`);
       return finish(nickOk ? 'อนุมัติ' : 'อนุมัติ (เปลี่ยนชื่อไม่ได้ ต้องเปลี่ยนเอง)');
     }
   } catch (err) {
