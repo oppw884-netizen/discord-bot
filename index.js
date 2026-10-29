@@ -337,11 +337,13 @@ client.on(Events.InteractionCreate, async (i) => {
         .setTimestamp();
       if (avatar) result.setThumbnail(avatar);
 
-      const resultCh = await client.channels.fetch(cfg.resultChannelId || cfg.reviewChannelId).catch(() => null);
-      await resultCh?.send({ content: `<@${discordId}>`, embeds: [result] }).catch(() => {});
+      // ส่งการ์ดประกาศผลทาง DM
+      const dmOk = await member.send({ embeds: [result] }).then(() => true).catch(() => false);
 
-      await dm(`✅ คำขอของคุณได้รับการอนุมัติแล้ว!\nชื่อ: **${nick}**`);
-      return finish(nickOk ? 'อนุมัติ' : 'อนุมัติ (เปลี่ยนชื่อไม่ได้ ต้องเปลี่ยนเอง)');
+      const notes = [];
+      if (!nickOk) notes.push('เปลี่ยนชื่อไม่ได้ ต้องเปลี่ยนเอง');
+      if (!dmOk) notes.push('ส่ง DM ไม่ได้ (ผู้ใช้ปิด DM)');
+      return finish(notes.length ? `อนุมัติ (${notes.join(', ')})` : 'อนุมัติ');
     }
   } catch (err) {
     console.error(err);
